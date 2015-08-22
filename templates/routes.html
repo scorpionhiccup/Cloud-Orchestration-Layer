@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h3 class="text-muted">
+                List of All The (GET) Routes Defined
+            </h3>
+        </div>
+        <hr/>
+        <div>
+            List of the defined routes on the application. 
+            <ul>
+                {% for route in routes %}
+                <li>
+                    <a href="{{route}}">
+                        {{route}}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            <hr/>
+        </div>
+    </div>
+</body>
+</html>
