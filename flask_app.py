@@ -1,7 +1,6 @@
 #! usr/bin/python
 
-from flask import Flask
-from flask import json, request, render_template, jsonify
+from flask import Flask, json, request, render_template, jsonify, redirect, url_for
 import random
 
 app = Flask(__name__)
@@ -117,6 +116,10 @@ def pm_query(pmid):
 def image_list():
 	list_images = [{'id':1, 'name':'Ubuntu-12.04-amd64'}]
 	return to_json({'images':list_images})
+
+@app.errorhandler(404)
+def page_not_found(e):
+	return redirect(url_for('list_all_urls'))
 
 if __name__ == '__main__':
 	app.debug= True
