@@ -1,7 +1,7 @@
 #! usr/bin/python
 
 from flask import Flask, json, request, render_template, jsonify, redirect, url_for
-import random
+import random, libvirt
 
 app = Flask(__name__)
 
@@ -12,6 +12,7 @@ def uniqueid():
        seed += 1
 
 vm_ids = []
+ips=[]
 unique_sequence=''
 vm_data = {}
 vm_types = {}
@@ -41,29 +42,43 @@ def vm_creation():
 	except Exception, e:
 		return "instance_type must be of type int."
 	
-	global vm_ids, unique_sequence 
+	global vm_ids, unique_sequence, ips
 
 	if not any(item['tid'] == instance_type for item in vm_types['types']):
 		return "The instance_type is invalid"
 
 	if len(vm_ids) == 0:
-		unique_sequence=uniqueid()
-		new_id = next(unique_sequence)
-		vm_ids.append(new_id)
-		vm_data[str(new_id)]={
-			'name': name,
-			'instance_type': instance_type 
-		}
+		try:
+			connect = libvirt.open('qemu:///system')
+			#libvirt.open('remote+ssh://') +ips[0]+'/system')
+			names = connect.listDefinedDomains()
+			print names
+
+			unique_sequence=uniqueid()
+			new_id = next(unique_sequence)
+			vm_ids.append(new_id)
+			vm_data[str(new_id)]={
+				'name': name,
+				'instance_type': instance_type 
+			}
+		except Exception, e:
+			print e
 	else:
 		while True:
 			temp = str(next(unique_sequence))
 			if temp not in vm_ids:
-				vm_ids.append(temp)
-				vm_data[temp]={
-					'name': name,
-					'instance_type': instance_type 
-				}
-				break
+				try:
+					connect = libvirt.open('remote+ssh://'+ips[0]+'/system')
+					names = connect.listDefinedDomains()
+					print names
+					vm_ids.append(temp)
+					vm_data[temp]={
+						'name': name,
+						'instance_type': instance_type 
+					}
+					break
+				except Exception, e:
+					print e
 
 	return to_json([vm_data])
 
@@ -106,7 +121,7 @@ def pm_list():
 
 @app.route("/pm/<pmid>/listvms")
 def pm_listvms(pmid):
-	return to_json(pmid)
+	return to_json({'vmids':vm_data.keys()})
 
 @app.route("/pm/<pmid>")
 def pm_query(pmid):
@@ -121,8 +136,39 @@ def image_list():
 def page_not_found(e):
 	return redirect(url_for('list_all_urls'))
 
+@app.route("/test")
+def list_virtual_machines():
+	conn=libvirt.open("qemu:///system")
+
+	domain_dict_1 = []
+	for id in conn.listDomainsID():
+		dom = conn.lookupByID(id)
+		info = dom.info()
+		domain_dict_1.append({
+		  'name' : dom.name(),
+		  'info' : dom.info()
+		})
+
+
+	domain_dict_2 = []
+	for dom in conn.listAllDomains():
+		info = dom.info()
+		domain_dict_2.append({
+		  'name' : dom.name(),
+		  'info' : dom.info()
+		})
+
+	domain_dict = {
+		'dict_1' : domain_dict_1,
+		'dict_2' : domain_dict_2
+	}
+	return to_json(domain_dict)
+
 if __name__ == '__main__':
 	app.debug= True
-	with open('types.json') as data_file:
+	with open('types.json', 'r') as data_file:
 		vm_types=json.load(data_file)
+	with open('ips.txt','r') as data_file:
+		ips=data_file.read().splitlines() 
+	
 	app.run()
