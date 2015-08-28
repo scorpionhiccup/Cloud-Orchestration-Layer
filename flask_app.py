@@ -1,6 +1,7 @@
 #! usr/bin/python
 
 from flask import Flask, json, request, render_template, jsonify, redirect, url_for
+from sh import virsh
 import random, libvirt
 
 app = Flask(__name__)
