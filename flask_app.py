@@ -2,7 +2,8 @@
 
 from flask import Flask, json, request, render_template, jsonify, redirect, url_for
 from sh import virsh
-import random, libvirt
+#, virt-install
+import random, libvirt, sys
 
 app = Flask(__name__)
 
@@ -13,8 +14,9 @@ def uniqueid():
        seed += 1
 
 vm_ids = []
-ips=[]
+ip_data = []
 unique_sequence=''
+image_locations=[]
 vm_data = {}
 vm_types = {}
 
@@ -43,7 +45,7 @@ def vm_creation():
 	except Exception, e:
 		return "instance_type must be of type int."
 	
-	global vm_ids, unique_sequence, ips
+	global vm_ids, unique_sequence, ip_data
 
 	if not any(item['tid'] == instance_type for item in vm_types['types']):
 		return "The instance_type is invalid"
@@ -51,7 +53,7 @@ def vm_creation():
 	if len(vm_ids) == 0:
 		try:
 			connect = libvirt.open('qemu:///system')
-			#libvirt.open('remote+ssh://') +ips[0]+'/system')
+			#libvirt.open('remote+ssh://') +ip_data[0]+'/system')
 			names = connect.listDefinedDomains()
 			print names
 
@@ -69,7 +71,7 @@ def vm_creation():
 			temp = str(next(unique_sequence))
 			if temp not in vm_ids:
 				try:
-					connect = libvirt.open('remote+ssh://'+ips[0]+'/system')
+					connect = libvirt.open('remote+ssh://'+ip_data[0]+'/system')
 					names = connect.listDefinedDomains()
 					print names
 					vm_ids.append(temp)
@@ -130,8 +132,7 @@ def pm_query(pmid):
 
 @app.route("/image/list")
 def image_list():
-	list_images = [{'id':1, 'name':'Ubuntu-12.04-amd64'}]
-	return to_json({'images':list_images})
+	return to_json({'images':image_locations})
 
 @app.errorhandler(404)
 def page_not_found(e):
@@ -165,11 +166,44 @@ def list_virtual_machines():
 	}
 	return to_json(domain_dict)
 
-if __name__ == '__main__':
-	app.debug= True
-	with open('types.json', 'r') as data_file:
+def ohysical_machines(pm_file):	
+	global ip_data
+	with open(pm_file,'r') as data_file:
+		ip_data=data_file.read().splitlines() 
+
+def vm_types(vm_types_file):
+	global vm_types
+	with open(vm_types_file, 'r') as data_file:
 		vm_types=json.load(data_file)
-	with open('ips.txt','r') as data_file:
-		ips=data_file.read().splitlines() 
-	
-	app.run()
+
+def get_image_locations(image_files_location):
+	global image_locations
+	with open(image_files_location, 'r') as data_file:
+		image_location_temp=data_file.read().splitlines()
+
+	unique_sequence=uniqueid()
+	for image_location in image_location_temp:
+		image_locations.append({
+			"id": next(unique_sequence), 
+			"name": image_location,
+			})
+		#image_locations[next(unique_sequence)]=image_location
+
+def main(arguments):
+	if len(arguments)!=3:
+		print 'Format: python flask_app.py pm_file image_file vm_types_file'
+		return 0
+
+	#TODO: assign ID's
+	ohysical_machines(arguments[0])
+	get_image_locations(arguments[1])
+	vm_types(arguments[2])
+
+	return 1
+
+if __name__ == '__main__':
+	app.debug= True #TODO: Change 
+	ret = main(sys.argv[1:])
+
+	if ret==1:
+		app.run()

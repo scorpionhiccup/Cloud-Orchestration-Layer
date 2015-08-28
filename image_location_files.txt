@@ -1,0 +1,2 @@
+/var/lib/libvirt/images/linuxmint-17-cinnamon-64bit-v2.iso
+/var/lib/libvirt/images/ubuntu-14.04-desktop-amd64.iso
