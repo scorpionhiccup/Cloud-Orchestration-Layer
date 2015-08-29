@@ -2,16 +2,17 @@
 
 from flask import Flask, json, request, render_template, jsonify, redirect, url_for
 from sh import virsh
+from flask.ext.sqlalchemy import SQLAlchemy
 #, virt-install
 import random, libvirt, sys
 
 app = Flask(__name__)
-
+	
 def uniqueid():
-    seed = random.getrandbits(32)
-    while True:
-       yield seed
-       seed += 1
+	seed = random.getrandbits(32)
+	while True:
+	   yield seed
+	   seed += 1
 
 vm_ids = []
 ip_data = []
@@ -54,9 +55,17 @@ def vm_creation():
 		try:
 			connect = libvirt.open('qemu:///system')
 			#libvirt.open('remote+ssh://') +ip_data[0]+'/system')
-			names = connect.listDefinedDomains()
-			print names
+			
+			#names = connect.listDefinedDomains()
+			#print names
 
+			str_out = create_xml("qemu", name, 2048, 2048, 2, image_locations[0]['name'], "/home/sash/temp.img")
+			import pprint
+			pprint.pprint(str_out)
+			#print str_out
+			connect_xml = connect.defineXML(str(str_out))
+			connect_xml.create()
+		
 			unique_sequence=uniqueid()
 			new_id = next(unique_sequence)
 			vm_ids.append(new_id)
@@ -64,8 +73,9 @@ def vm_creation():
 				'name': name,
 				'instance_type': instance_type 
 			}
+		
 		except Exception, e:
-			print e
+			raise e
 	else:
 		while True:
 			temp = str(next(unique_sequence))
@@ -187,23 +197,55 @@ def get_image_locations(image_files_location):
 			"id": next(unique_sequence), 
 			"name": image_location,
 			})
-		#image_locations[next(unique_sequence)]=image_location
+
+def create_xml(arch, vm_name, memory, vcpu, image_location, storage_location):
+	xml = "<domain type='" + str(arch) + "'>  \
+			<name>" + str(vm_name) + "</name>  \
+			<memory>" + str((memory*100000)/1024) + "</memory>  \
+			<vcpu>" + str(vcpu) + "</vcpu>  \
+			<os>  \
+				<type arch='i686' machine='pc'>hvm</type>  \
+				<boot dev='cdrom'/>  \
+			</os>  \
+			<devices>  \
+				<emulator>/usr/bin/qemu-system-x86_64</emulator>  \
+				<disk type='file' device='cdrom'>  \
+				<source file='" + str(image_location)+ "'/>  \
+			  <target dev='hdc'/>  \
+			  <readonly/>  \
+			</disk>  \
+			<disk type='file' device='disk'>  \
+				<source file='" + str(storage_location) + "'/>  \
+				<target dev='hda'/>  \
+			</disk>  \
+			<interface type='network'>  \
+				<source network='default'/>  \
+			</interface>  \
+			<on_poweroff>destroy</on_poweroff>			\
+			<on_reboot>restart</on_reboot>				\
+			<on_crash>restart</on_crash>				\
+			<graphics type='vnc' port='-1'/>  \
+		  </devices>  \
+		</domain>"
+	return xml	
 
 def main(arguments):
 	if len(arguments)!=3:
-		print 'Format: python flask_app.py pm_file image_file vm_types_file'
 		return 0
 
 	#TODO: assign ID's
 	ohysical_machines(arguments[0])
 	get_image_locations(arguments[1])
 	vm_types(arguments[2])
-
+	
 	return 1
 
 if __name__ == '__main__':
-	app.debug= True #TODO: Change 
+	app.config.from_object('config')
+	db = SQLAlchemy(app)
 	ret = main(sys.argv[1:])
 
 	if ret==1:
-		app.run()
+		app.run(debug=True) #TODO: Change 
+	else:
+		raise SyntaxError('Expected Syntax: python flask_app.py pm_file image_file vm_types_file')
