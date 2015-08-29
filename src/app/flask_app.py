@@ -11,8 +11,8 @@ app = Flask(__name__)
 def uniqueid():
 	seed = random.getrandbits(32)
 	while True:
-	   yield seed
-	   seed += 1
+		yield seed
+		seed += 1
 
 vm_ids = []
 ip_data = []
@@ -42,7 +42,7 @@ def list_all_urls():
 def vm_creation():
 	name=request.args.get('name', '')
 	try:
-		instance_type=int(request.args.get('instance_type', 1))
+		instance_type=int(request.args.get('instance_type', 0))
 	except Exception, e:
 		return "instance_type must be of type int."
 	
@@ -57,11 +57,8 @@ def vm_creation():
 			#libvirt.open('remote+ssh://') +ip_data[0]+'/system')
 			
 			#names = connect.listDefinedDomains()
-			#print names
-
-			str_out = create_xml("qemu", name, 2048, 2048, 2, image_locations[0]['name'], "/home/sash/temp.img")
-			import pprint
-			pprint.pprint(str_out)
+			
+			str_out = create_xml("qemu", name, 2048, 2, image_locations[0]['name'], "/home/sash/temp.img")
 			#print str_out
 			connect_xml = connect.defineXML(str(str_out))
 			connect_xml.create()
@@ -131,7 +128,7 @@ def vm_types():
 @app.route("/pm/list")
 def pm_list():
 	return to_json('')
-
+	
 @app.route("/pm/<pmid>/listvms")
 def pm_listvms(pmid):
 	return to_json({'vmids':vm_data.keys()})
