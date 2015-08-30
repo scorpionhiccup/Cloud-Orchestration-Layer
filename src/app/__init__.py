@@ -5,7 +5,9 @@ app = Flask(__name__)
 app.config.from_object('config')
 db = SQLAlchemy(app)
 
-try:
-	from src.app import models, flask_app
-except Exception, e:
-	from app import models, flask_app
+from app import models, flask_app
+global ip_data, image_locations, vm_types, unique_sequence
+ip_data = []
+image_locations=[]
+vm_types = {}
+unique_sequence=''
