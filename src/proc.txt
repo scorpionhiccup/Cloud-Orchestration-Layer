@@ -1,0 +1,11 @@
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda8       279G   92G  173G  35% /
+none            4.0K     0  4.0K   0% /sys/fs/cgroup
+udev            7.8G  4.0K  7.8G   1% /dev
+tmpfs           1.6G  1.7M  1.6G   1% /run
+none            5.0M     0  5.0M   0% /run/lock
+none            7.8G  233M  7.6G   3% /run/shm
+none            100M   48K  100M   1% /run/user
+/dev/sda2       256M   33M  224M  13% /boot/efi
+/dev/sr1        615M  615M     0 100% /media/sash/WD SmartWare
+/dev/sdb1       298G  295G  3.1G  99% /media/sash/My Passport

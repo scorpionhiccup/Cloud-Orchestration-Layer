@@ -5,11 +5,10 @@ from flask import Flask, json, request, render_template, \
 from app import app, db, models
 import app as app_globals
 import uuid
-#import src.run
-#, virt-install
 from flask.ext.sqlalchemy import SQLAlchemy
 from models import PhysicalMachines, VirtualMachine
 import os, random, libvirt, sys
+from sh import uname, nproc, tail, head, free, df
 
 vm_data = {}
 
@@ -105,7 +104,7 @@ def vm_creation():
 	
 	output = PhysicalMachines.query.filter(
 		PhysicalMachines.vcpu>=cpu, 
-		PhysicalMachines.free_ram >= ram).first()
+		PhysicalMachines.ram >= ram).first()
 	if not output:
 		return to_json({'vmid': 0})
 	else:
@@ -211,9 +210,50 @@ def pm_listvms():
 
 	return to_json(output)
 
-@app.route("/pm/<pmid>")
-def pm_query(pmid):
-	return to_json(pmid)
+@app.route("/pm/query")
+def pm_query():
+	output={
+		'pmid':0,
+		'vms': 0,
+	}
+
+	try:
+		pmid=int(str(request.args.get('pmid')))
+	except Exception, e:
+		return to_json(output)
+
+	phy_obj = PhysicalMachines.query.filter_by(id=pmid).first()
+	if phy_obj:
+		output['capacity'] = {
+			'cpu': phy_obj.vcpu,
+			'ram': phy_obj.ram,
+			'disk': phy_obj.free_space
+		}
+		output['vms'] = VirtualMachine.query.filter_by(pmid=pmid).count()
+		output['pmid']=pmid
+
+		obj = '@'.join([phy_obj.username, phy_obj.ip_addr])
+		
+		os.system("ssh " + obj + " \"cat /proc/cpuinfo | awk '/^processor/{print $3}' | tail -1 \" > proc.txt")
+		with open("proc.txt") as data_file:
+			vcpu = int(str(data_file.read().splitlines()[0]).split()[2])
+		
+		print vcpu
+		
+		os.system("ssh " + obj + " 'free -m | head -n2 | tail -n1' > proc.txt")
+		with open("proc.txt") as data_file:
+			ram = int(str(data_file.read().splitlines()[0].split()[3]))
+
+		os.system("ssh " + obj + " 'df -h' > proc.txt")
+		with open("proc.txt") as data_file:
+			free_space = str(data_file.read().splitlines()[1].split()[3])
+
+		output['free'] = {
+			'cpu': vcpu,
+			'ram': ram,
+			'free_space': free_space
+		}
+	return to_json(output)
 
 @app.route("/image/list")
 def image_list():

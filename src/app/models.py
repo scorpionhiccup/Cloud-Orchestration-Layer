@@ -8,15 +8,15 @@ class PhysicalMachines(db.Model):
 	hardware = db.Column(db.Integer)
 	vcpu = db.Column(db.Integer)
 	free_space = db.Column(db.String(20))
-	free_ram = db.Column(db.Integer)
+	ram = db.Column(db.Integer)
 
 	def __repr__(self):
 		return '<PM_ID: %d ==> %s@%s>' % (self.id, self.username, self.ip_addr)
 
-	def __init__(self, ip, hardware, vcpu, free_ram, free_space):
+	def __init__(self, ip, hardware, vcpu, ram, free_space):
 		self.username, self.ip_addr = ip.split('@')
 		self.hardware = hardware
-		self.free_ram = free_ram
+		self.ram = ram
 		self.vcpu = vcpu
 		self.free_space = free_space
 
