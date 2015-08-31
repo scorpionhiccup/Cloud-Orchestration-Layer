@@ -15,11 +15,13 @@ def ohysical_machines(pm_file):
 	with open(pm_file,'r') as data_file:
 		app_globals.ip_data=data_file.read().splitlines()
 	
+	'''
 	try:
 		db.session.query(PhysicalMachines).delete()
 		db.session.commit()
 	except Exception, e:
 		db.session.rollback()
+	'''
 
 	for obj in app_globals.ip_data:
 		data = obj.split('@')
