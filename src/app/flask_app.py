@@ -156,6 +156,9 @@ def vm_query():
 		output['instance_type'] = obj.instance_type
 		output['pmid'] = obj.pmid
 	else:
+		output['vmid']='null'
+		output['name']=''
+		output['instance_type'] = 0
 		output['pmid'] = 0
 	
 	return to_json(output)
@@ -171,12 +174,10 @@ def vm_destroy():
 	
 	try:
 		status = destroy(vmid)
-		print status
 		output['status']=status
 	except Exception, e:
 		output['status']=0
 
-	print output
 	return to_json(output)
 
 @app.route("/vm/types")
@@ -189,9 +190,26 @@ def pm_list():
 	json_out = {'pmids': [item.id for item in output]}	
 	return to_json(json_out)
 
-@app.route("/pm/<pmid>/listvms")
-def pm_listvms(pmid):
-	return to_json({'vmids':vm_data.keys()})
+@app.route("/pm/listvms")
+def pm_listvms():
+	output={'vmids':0}
+	try:
+		pmid=int(str(request.args.get('pmid')))
+	except Exception, e:
+		return to_json(output)
+
+	phy_obj = PhysicalMachines.query.filter_by(id=pmid).first()
+	if phy_obj:		
+		vir_objs = VirtualMachine.query.all() 
+		if not vir_objs:
+			return to_json(output)
+		
+		output['vmids'] = []
+		for obj in vir_objs:
+			if obj.pmid == pmid:
+				output['vmids'].append(obj.id)
+
+	return to_json(output)
 
 @app.route("/pm/<pmid>")
 def pm_query(pmid):
@@ -250,6 +268,7 @@ def destroy(vmid):
 					temp.destroy()
 				temp.undefine()
 				db.session.delete(obj)
+				db.session.commit()
 				return 1
 			else:
 				return 0
