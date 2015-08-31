@@ -5,12 +5,11 @@ from flask import Flask, json, request, render_template, \
 from sh import virsh
 from app import app, db, models
 import app as app_globals
-import os, sys
 #import src.run
 #, virt-install
 from flask.ext.sqlalchemy import SQLAlchemy
 from models import PhysicalMachines, VirtualMachine
-import random, libvirt, sys
+import os, random, libvirt, sys
 
 vm_data = {}
 vm_ids = []
@@ -65,17 +64,25 @@ def vm_creation():
 		return "The image_id is invalid"
 	
 	if len(vm_ids) == 0:
-		try:
+		#try:
 			connect = libvirt.open('qemu:///system')
 			#libvirt.open('remote+ssh://') +app_globals.ip_data[0]+'/system')
-			#names = connect.listDefinedDomains()
+			
 			cpu = app_globals.vm_types["types"][instance_type]["cpu"]
 			ram = app_globals.vm_types["types"][instance_type]["ram"]
+
+			output = PhysicalMachines.query.filter_by(vcpu >= cpu)
+			if output == None:
+				print "HERE"
+				return to_json({'vmid': 0})
+			
+			output = db.session.query(PhysicalMachines).all()
+			print output
+			
 			str_out = create_xml("qemu", name, \
-				cpu, 
-				ram, \
+				cpu, ram, \
 				ret['name'], "/home/sash/temp.img")
-			print str_out
+			
 			connect_xml = connect.defineXML(str(str_out))
 			connect_xml.create()
 		
@@ -84,14 +91,23 @@ def vm_creation():
 			while new_id==0:
 				new_id = next(app_globals.unique_sequence)
 
-			VirtualMachine(name, cpu, ram)
+			try:
+				VirtualMachine(new_id, name, cpu, ram, output)
+				try:
+					db.session.add(pm_obj)
+					db.session.commit()
+				except Exception, e:
+					db.session.rollback()
+			except Exception, e:
+				print e
+
 			vm_ids.append(new_id)
 			vm_data[str(new_id)]={
 				'vmid': new_id
 			}
 			return to_json({'vmid': new_id})
-		except Exception, e:
-			return to_json({'vmid': 0})
+		#except Exception, e:
+		#	return to_json({'vmid': 0})
 	else:
 		while True:
 			temp = str(next(app_globals.unique_sequence))
@@ -133,8 +149,6 @@ def vm_destroy():
 		output['status']=0
 		return to_json(output)
 	
-	#global vm_data
-
 	try:
 		status = destroy(vmid)
 		if status == 1: 
@@ -151,7 +165,9 @@ def vm_types():
 
 @app.route("/pm/list")
 def pm_list():
-	return to_json('')
+	output = db.session.query(PhysicalMachines).all()
+	json_out = {'pmids': [item.id for item in output]}	
+	return to_json(json_out)
 
 @app.route("/pm/<pmid>/listvms")
 def pm_listvms(pmid):
@@ -205,7 +221,7 @@ def list_virtual_machines():
 def create_xml(arch, vm_name, memory, vcpu, image_location, storage_location):
 	xml = "<domain type='" + str(arch) + "'>  \
 			<name>" + str(vm_name) + "</name>  \
-			<memory>" + str((memory*100000)/1024) + "</memory>  \
+			<memory>" + str(memory) + "</memory>  \
 			<vcpu>" + str(vcpu) + "</vcpu>  \
 			<os>  \
 				<type arch='i686' machine='pc'>hvm</type>  \
@@ -225,8 +241,6 @@ def create_xml(arch, vm_name, memory, vcpu, image_location, storage_location):
 			<interface type='network'>  \
 				<source network='default'/>  \
 			</interface>  \
-			<on_poweroff>destroy</on_poweroff>			\
-			<on_reboot>restart</on_reboot>				\
 			<on_crash>restart</on_crash>				\
 			<graphics type='vnc' port='-1'/>  \
 		  </devices>  \
@@ -236,11 +250,16 @@ def create_xml(arch, vm_name, memory, vcpu, image_location, storage_location):
 def destroy(vmid):
 	try:
 		#instance_type, vm_name, machine_id
-
 		connect = libvirt.open("remote+ssh://" + \
 			app_globals.ip_data[0].split('@')[1] + '/system')
-		
+
 		try:
+			vmid=str(request.args.get('vmid'))
+		except Exception, e:
+			return 0
+
+		try:
+			#if VirtualMachine.query.filter_by()!=None:
 			temp = connect.lookupByName('test3')
 		except Exception, e:
 			return 0
@@ -249,6 +268,7 @@ def destroy(vmid):
 			temp.destroy()
 
 		temp.undefine()
+
 		return 1
 	except Exception, e:
 		raise e

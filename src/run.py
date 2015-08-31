@@ -3,7 +3,7 @@ from app import app, db, ip_data, image_locations, vm_types, unique_sequence
 import app as app_globals
 from app.models import PhysicalMachines
 import sys, random, json, libvirt, os
-from sh import uname, nproc
+from sh import uname, nproc, tail, head, free, df
 
 def uniqueid():
 	seed = random.getrandbits(32)
@@ -14,6 +14,12 @@ def uniqueid():
 def ohysical_machines(pm_file):	
 	with open(pm_file,'r') as data_file:
 		app_globals.ip_data=data_file.read().splitlines()
+	
+	try:
+		db.session.query(PhysicalMachines).delete()
+		db.session.commit()
+	except Exception, e:
+		db.session.rollback()
 
 	for obj in app_globals.ip_data:
 		data = obj.split('@')
@@ -24,20 +30,33 @@ def ohysical_machines(pm_file):
 			raise e
 		
 		try:
-			#print uname('-n')
+			hardware=32
 			if str(uname('-m')).rsplit()[0]=='x86_64':
 				hardware=64
 			else:
 				hardware=32
 
 			vcpu = int(str(nproc()).rsplit()[0])
-			
+			free_ram = str(tail(head(free('-m'), '-n2'), '-n1').split()[3])
+			free_space = str(df('-h').split('\n')[1].split()[3])
 		except Exception, e:
 			raise e
-		
-		pm_obj = PhysicalMachines(obj)
-		db.session.add(pm_obj)
-		db.session.commit()
+
+		if not PhysicalMachines.query.filter_by(
+			username=obj.split('@')[0], 
+			ip_addr=obj.split('@')[1]).all():
+			pm_obj = PhysicalMachines(obj, hardware, vcpu, free_ram, free_space)
+			try:
+				db.session.add(pm_obj)
+				db.session.commit()
+			except Exception, e:
+				db.session.rollback()
+
+	'''
+	for item in PhysicalMachines.query.all():
+		print item
+	'''
+	
 
 def load_vm_types(vm_types_file):
 	global vm_types
