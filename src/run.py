@@ -4,6 +4,7 @@ import app as app_globals
 from app.models import PhysicalMachines
 import sys, random, json, libvirt, os
 from sh import uname, nproc, tail, head, free, df
+flag=False
 
 def uniqueid():
 	seed = random.getrandbits(32)
@@ -15,13 +16,12 @@ def physical_machines(pm_file):
 	with open(pm_file,'r') as data_file:
 		app_globals.ip_data=data_file.read().splitlines()
 	
-	
 	try:
 		db.session.query(PhysicalMachines).delete()
 		db.session.commit()
 	except Exception, e:
 		db.session.rollback()
-	
+
 	for obj in app_globals.ip_data:
 		try:
 			connect = libvirt.open("remote+ssh://" + obj + "/system")
@@ -34,12 +34,11 @@ def physical_machines(pm_file):
 			ip_addr=obj.split('@')[1]).all():
 			
 			try:
-				hardware=32
 				if str(uname('-m')).rsplit()[0]=='x86_64':
 					hardware=64
 				else:
 					hardware=32
-
+				
 				os.system("ssh " + obj + " nproc > proc.txt")
 
 				with open("proc.txt") as data_file:
@@ -66,7 +65,10 @@ def physical_machines(pm_file):
 				db.session.commit()
 			except Exception, e:
 				db.session.rollback()
-	
+		
+		os.system("ssh " + obj + " mkdir -p /home/" + obj.split('@')[0] + "/Images/")
+		os.system("scp ~/Images/linux.img " + obj + ":~/Images/")
+		connect.close()
 
 def load_vm_types(vm_types_file):
 	global vm_types
@@ -80,9 +82,11 @@ def get_image_locations(image_files_location):
 
 	app_globals.unique_sequence=uniqueid()
 	for image_location in image_location_temp:
+		ip_info, name  = str(image_location).split(':', 1)
 		app_globals.image_locations.append({
 			"id": next(app_globals.unique_sequence), 
-			"name": image_location,
+			"name": name,
+			"ip_info": ip_info
 			})
 
 def main(arguments):
@@ -94,5 +98,7 @@ def main(arguments):
 	load_vm_types(arguments[2])
 	
 if __name__ == '__main__':
-	main(sys.argv[1:])
-	app.run(debug = True)
+	if flag==False:
+		main(sys.argv[1:])
+		app.run(debug = True)
+		flag=True

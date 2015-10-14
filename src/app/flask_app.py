@@ -1,7 +1,7 @@
-#! usr/bin/python
-
+#!/usr/bin/python
 from flask import Flask, json, request, render_template, \
 	jsonify, redirect, url_for
+from flask import make_response
 from app import app, db, models
 import app as app_globals
 import uuid
@@ -9,6 +9,10 @@ from flask.ext.sqlalchemy import SQLAlchemy
 from models import PhysicalMachines, VirtualMachine
 import os, random, libvirt, sys
 from sh import uname, nproc, tail, head, free, df
+#import rados, rbd
+
+POOL_NAME = 'rbd'
+CONF_FILE = '/etc/ceph/ceph.conf'
 
 vm_data = {}
 
@@ -26,6 +30,7 @@ def to_json(var):
 	else:
 		return jsonify(var)
 
+
 @app.route("/")
 def list_all_urls():
 	'''
@@ -42,6 +47,42 @@ def list_all_urls():
 			url = rule.rule
 			routes.append(url)
 	return render_template('routes.html', routes=routes)
+
+'''
+def establishConnection():
+	radosConnection = rados.Rados(conffile=CONF_FILE)
+	radosConnection.connect()
+
+	if POOL_NAME not in radosConnection.list_pools():                                
+		radosConnection.create_pool(POOL_NAME)
+	
+	rados_ioctx = radosConnection.open_ioctx(POOL_NAME)
+	rbdInstance = rbd.RBD()
+	return rados_ioctx
+
+
+@app.route("/volume/create", methods=['POST', 'GET'])
+def volume_creation():
+	establishConnection()
+	name=str(request.args.get('name', ''))
+	size=float(request.args.get('size', 0))
+	size = (1024) * size
+	#size = (1024**3) * size
+
+	rados_ioctx=establishConnection()
+
+	print "\nWriting object 'hw' with contents 'Hello World!' to pool ''."
+	rados_ioctx.write_full("hw", "Hello World!")
+
+	print "Done! :)"
+	#try:
+	#rbdInstance.create(rados_ioctx, name, int(size))
+	#os.system('sudo rbd map %s --pool %s --name client.admin'%(name, POOL_NAME))
+	#except Exception, e:
+	#	return to_json({'volumeid':0})
+
+	return to_json({'vmid': 0})
+'''
 
 def create_xml(_uuid, arch, vm_name, memory, vcpu, image_location, storage_location):
 	xml = "<domain type='" + str(arch) + "'>  \
@@ -111,20 +152,27 @@ def vm_creation():
 		pmid = output.id
 
 	ip_pm = '@'.join([output.username, output.ip_addr])
-	connect = libvirt.open(
-		'remote+ssh://' +  ip_pm + '/system')
+
+	print output.username, output.ip_addr
+
+	setup(ret['name'], output.username, output.ip_addr)
+	connect = libvirt.open('remote+ssh://' +  ip_pm + '/system')
 
 	temp = str(uuid.uuid4())
-	str_out = create_xml(
-		temp, \
-		"qemu", name, \
-		ram, cpu, \
-		ret['name'], "/home/sash/temp.img")
-	
-	connect_xml = connect.defineXML(str(str_out))
-	connect_xml.create()
 
+	print output.username, output.ip_addr
+	
 	try:
+		str_out = create_xml(
+			temp, \
+			connect.getType().lower(), name, \
+			ram, cpu, \
+			ret['name'], "/home/" + output.username + "Images/linux.img")
+		
+		connect_xml = connect.defineXML(str(str_out))
+		connect_xml.create()
+		connect.close()
+		
 		vm_obj = VirtualMachine(name, cpu, ram, output.id, ip_pm, temp, instance_type)
 		try:
 			db.session.add(vm_obj)
@@ -138,6 +186,13 @@ def vm_creation():
 
 	return to_json({'vmid': 0})
 	
+def setup(image_path, username, ip):
+	'''
+		Copies the ISO file for the VM creation
+	'''
+	print "PHEW", username, ip
+	os.system("scp " + str(image_path) + " " + str(ip) + ":/home/" + str(username) + "/Images/" + os.path.basename(image_path))
+
 		
 @app.route("/vm/query")
 def vm_query():
@@ -227,7 +282,7 @@ def pm_query():
 		output['capacity'] = {
 			'cpu': phy_obj.vcpu,
 			'ram': phy_obj.ram,
-			'disk': phy_obj.free_space
+			'disk': int(str(phy_obj.free_space)[:-1])
 		}
 		output['vms'] = VirtualMachine.query.filter_by(pmid=pmid).count()
 		output['pmid']=pmid
@@ -238,7 +293,7 @@ def pm_query():
 		with open("proc.txt") as data_file:
 			vcpu = int(str(data_file.read().splitlines()[0]).split()[2])
 		
-		print vcpu
+		#print vcpu
 		
 		os.system("ssh " + obj + " 'free -m | head -n2 | tail -n1' > proc.txt")
 		with open("proc.txt") as data_file:
@@ -251,7 +306,7 @@ def pm_query():
 		output['free'] = {
 			'cpu': vcpu,
 			'ram': ram,
-			'free_space': free_space
+			'disk': int(str(free_space)[:-1])
 		}
 	return to_json(output)
 
@@ -264,9 +319,15 @@ def image_list():
 			'name': os.path.splitext(str(obj['name']).split('/')[-1])[0]})
 	return to_json(output)
 
+'''
 @app.errorhandler(404)
 def page_not_found(e):
 	return redirect(url_for('list_all_urls'))
+'''
+
+@app.errorhandler(404)
+def not_found(error):
+    return make_response(jsonify({ 'Error': 'URL not found' } ), 404)
 
 @app.route("/test")
 def list_virtual_machines():
