@@ -48,7 +48,7 @@ def list_all_urls():
 			routes.append(url)
 	return render_template('routes.html', routes=routes)
 
-'''
+
 def establishConnection():
 	radosConnection = rados.Rados(conffile=CONF_FILE)
 	radosConnection.connect()
@@ -63,26 +63,28 @@ def establishConnection():
 
 @app.route("/volume/create", methods=['POST', 'GET'])
 def volume_creation():
-	establishConnection()
 	name=str(request.args.get('name', ''))
 	size=float(request.args.get('size', 0))
-	size = (1024) * size
-	#size = (1024**3) * size
+	#size = (1024) * size
+	size = (1024**3) * size
 
 	rados_ioctx=establishConnection()
 
-	print "\nWriting object 'hw' with contents 'Hello World!' to pool ''."
-	rados_ioctx.write_full("hw", "Hello World!")
+	#print "\nWriting object 'hw' with contents 'Hello World!' to pool ''."
+	#rados_ioctx.write_full("hw", "Hello World!")
 
-	print "Done! :)"
-	#try:
-	#rbdInstance.create(rados_ioctx, name, int(size))
-	#os.system('sudo rbd map %s --pool %s --name client.admin'%(name, POOL_NAME))
-	#except Exception, e:
-	#	return to_json({'volumeid':0})
+	#print "Done! :)"
+	try:
+		rbdInstance.create(rados_ioctx, name, int(size))
+		os.system('sudo rbd map %s --pool %s --name client.admin'%(name, POOL_NAME))
+	except Exception, e:
+		return to_json({'volumeid':0})
 
 	return to_json({'vmid': 0})
-'''
+
+@app.route("/volume/query", methods=['POST', 'GET'])
+def volume_query():
+	volumeId = str(request.args.get('volumeid',''))
 
 def create_xml(_uuid, arch, vm_name, memory, vcpu, image_location, storage_location):
 	xml = "<domain type='" + str(arch) + "'>  \

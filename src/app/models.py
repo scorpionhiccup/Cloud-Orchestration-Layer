@@ -44,3 +44,8 @@ class VirtualMachine(db.Model):
 		self.ip_pm = ip_pm
 		self.uuid = _uuid
 		self.instance_type = instance_type
+
+class Volume(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	name = db.Column(db.String(50))
+	vmid = db.Column(db.String(50))
