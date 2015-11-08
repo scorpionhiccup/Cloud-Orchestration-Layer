@@ -9,9 +9,9 @@ from flask.ext.sqlalchemy import SQLAlchemy
 from models import PhysicalMachines, VirtualMachine
 import os, random, libvirt, sys
 from sh import uname, nproc, tail, head, free, df
-#import rados, rbd
+import rados, rbd
 
-POOL_NAME = 'rbd'
+POOL_NAME = 'cloud-project'
 CONF_FILE = '/etc/ceph/ceph.conf'
 
 vm_data = {}
@@ -155,26 +155,27 @@ def vm_creation():
 
 	ip_pm = '@'.join([output.username, output.ip_addr])
 
-	print output.username, output.ip_addr
+	#print output.username, output.ip_addr
 
 	setup(ret['name'], output.username, output.ip_addr)
 	connect = libvirt.open('remote+ssh://' +  ip_pm + '/system')
 
 	temp = str(uuid.uuid4())
 
-	print output.username, output.ip_addr
+	#print output.username, output.ip_addr
 	
 	try:
+	
 		str_out = create_xml(
 			temp, \
 			connect.getType().lower(), name, \
 			ram, cpu, \
-			ret['name'], "/home/" + output.username + "Images/linux.img")
+			ret['name'], "/home/" + output.username + "/Images/linux.img")
 		
 		connect_xml = connect.defineXML(str(str_out))
 		connect_xml.create()
 		connect.close()
-		
+	
 		vm_obj = VirtualMachine(name, cpu, ram, output.id, ip_pm, temp, instance_type)
 		try:
 			db.session.add(vm_obj)
@@ -183,6 +184,7 @@ def vm_creation():
 			return to_json({'vmid': obj.id})
 		except Exception, e:
 			db.session.rollback()
+		
 	except Exception, e:
 		print e
 
@@ -192,7 +194,7 @@ def setup(image_path, username, ip):
 	'''
 		Copies the ISO file for the VM creation
 	'''
-	print "PHEW", username, ip
+	#print "PHEW", username, ip
 	os.system("scp " + str(image_path) + " " + str(ip) + ":/home/" + str(username) + "/Images/" + os.path.basename(image_path))
 
 		

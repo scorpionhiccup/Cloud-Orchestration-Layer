@@ -67,7 +67,7 @@ def physical_machines(pm_file):
 				db.session.rollback()
 		
 		os.system("ssh " + obj + " mkdir -p /home/" + obj.split('@')[0] + "/Images/")
-		os.system("scp ~/Images/linux.img " + obj + ":~/Images/")
+		#os.system("scp ~/Images/linux.img " + obj + ":~/Images/")
 		connect.close()
 
 def load_vm_types(vm_types_file):
