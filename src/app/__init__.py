@@ -12,3 +12,4 @@ ip_data = []
 image_locations=[]
 vm_types = {}
 unique_sequence=''
+DEBUG=True

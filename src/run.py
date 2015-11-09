@@ -52,6 +52,7 @@ def physical_machines(pm_file):
 				with open("proc.txt") as data_file:
 					free_space = str(data_file.read().splitlines()[1].split()[1])
 
+				os.system("rm proc.txt")
 				#vcpu = int(str(nproc()).rsplit()[0])
 				#ram = str(tail(head(free('-m'), '-n2'), '-n1').split()[0])
 				#free_ram = str(tail(head(free('-m'), '-n2'), '-n1').split()[3])

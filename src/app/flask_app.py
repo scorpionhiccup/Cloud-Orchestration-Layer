@@ -6,13 +6,28 @@ from app import app, db, models
 import app as app_globals
 import uuid
 from flask.ext.sqlalchemy import SQLAlchemy
-from models import PhysicalMachines, VirtualMachine
+from models import PhysicalMachines, VirtualMachine, Volume
 import os, random, libvirt, sys
 from sh import uname, nproc, tail, head, free, df
 import rados, rbd
+global rbdInstance, rados_ioctx
 
 POOL_NAME = 'cloud-project'
 CONF_FILE = '/etc/ceph/ceph.conf'
+
+def establishConnection():
+	radosConnection = rados.Rados(conffile=CONF_FILE)
+	radosConnection.connect()
+
+	if POOL_NAME not in radosConnection.list_pools():                                
+		radosConnection.create_pool(POOL_NAME)
+	
+	global rbdInstance, rados_ioctx
+	rados_ioctx = radosConnection.open_ioctx(POOL_NAME)
+	rbdInstance = rbd.RBD()
+	return rados_ioctx
+
+establishConnection()
 
 vm_data = {}
 
@@ -49,18 +64,6 @@ def list_all_urls():
 	return render_template('routes.html', routes=routes)
 
 
-def establishConnection():
-	radosConnection = rados.Rados(conffile=CONF_FILE)
-	radosConnection.connect()
-
-	if POOL_NAME not in radosConnection.list_pools():                                
-		radosConnection.create_pool(POOL_NAME)
-	
-	rados_ioctx = radosConnection.open_ioctx(POOL_NAME)
-	rbdInstance = rbd.RBD()
-	return rados_ioctx
-
-
 @app.route("/volume/create", methods=['POST', 'GET'])
 def volume_creation():
 	name=str(request.args.get('name', ''))
@@ -68,23 +71,66 @@ def volume_creation():
 	#size = (1024) * size
 	size = (1024**3) * size
 
-	rados_ioctx=establishConnection()
-
 	#print "\nWriting object 'hw' with contents 'Hello World!' to pool ''."
 	#rados_ioctx.write_full("hw", "Hello World!")
 
 	#print "Done! :)"
 	try:
+		global rbdInstance, rados_ioctx
 		rbdInstance.create(rados_ioctx, name, int(size))
 		os.system('sudo rbd map %s --pool %s --name client.admin'%(name, POOL_NAME))
+
+		vol_obj = Volume(name, 0, 0)
+		try:
+			db.session.add(vol_obj)
+			obj = db.session.query(Volume).order_by(Volume.id.desc()).first()
+			db.session.commit()
+			return to_json({'volumeid': obj.id})
+		except Exception, e:
+			print 'HERE', e
+			db.session.rollback()
 	except Exception, e:
+		print e
 		return to_json({'volumeid':0})
 
-	return to_json({'vmid': 0})
+	return to_json({'volumeid': 0})
 
 @app.route("/volume/query", methods=['POST', 'GET'])
 def volume_query():
 	volumeId = str(request.args.get('volumeid',''))
+
+@app.route("/volume/destroy", methods=['POST', 'GET'])
+def volume_delete():
+	output = {}
+	try:
+		vol_id=int(str(request.args.get('volumeid')))
+	except Exception, e:
+		output['status']=0
+		return to_json(output)
+
+	try:		
+		obj = Volume.query.filter_by(id=vol_id, status=0).first()
+		if obj:
+			name=str(obj.name)
+		else:
+			output['status']=0
+			return to_json(output)
+
+		global rbdInstance, rados_ioctx
+		print name
+		rbdInstance.remove(rados_ioctx, str(name))
+		os.system('sudo rbd unmap /dev/rbd/%s/%s'%(POOL_NAME, str(name)))
+		
+		db.session.delete(obj)
+		db.session.commit()
+	
+		output['status']=1
+	except Exception, e:
+		print e
+		raise e
+		output['status']=0
+	
+	return to_json(output)	
 
 def create_xml(_uuid, arch, vm_name, memory, vcpu, image_location, storage_location):
 	xml = "<domain type='" + str(arch) + "'>  \
@@ -157,13 +203,14 @@ def vm_creation():
 
 	#print output.username, output.ip_addr
 
-	setup(ret['name'], output.username, output.ip_addr)
+	if not app_globals.DEBUG:
+		setup(ret['name'], output.username, output.ip_addr)
+	
 	connect = libvirt.open('remote+ssh://' +  ip_pm + '/system')
 
 	temp = str(uuid.uuid4())
 
 	#print output.username, output.ip_addr
-	
 	try:
 	
 		str_out = create_xml(
@@ -172,6 +219,7 @@ def vm_creation():
 			ram, cpu, \
 			ret['name'], "/home/" + output.username + "/Images/linux.img")
 		
+		print str_out
 		connect_xml = connect.defineXML(str(str_out))
 		connect_xml.create()
 		connect.close()

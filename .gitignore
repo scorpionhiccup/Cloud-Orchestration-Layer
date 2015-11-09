@@ -59,4 +59,5 @@ target/
 ips.txt
 
 src/app.db
+src/project-app.db
 src/db_migrations

@@ -49,3 +49,15 @@ class Volume(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	name = db.Column(db.String(50))
 	vmid = db.Column(db.String(50))
+	status = db.Column(db.Integer, unique=False)
+	'''
+		status:
+			0 => No VM Attached.
+			1 => VM Attached
+			2 => VM Deleted.
+	'''
+
+	def __init__(self, name, status=0, vmid=0):
+		self.name=name
+		self.status=status
+		self.vmid=vmid
