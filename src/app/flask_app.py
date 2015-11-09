@@ -8,8 +8,9 @@ import uuid
 from flask.ext.sqlalchemy import SQLAlchemy
 from models import PhysicalMachines, VirtualMachine, Volume
 import os, random, libvirt, sys
-from sh import uname, nproc, tail, head, free, df
 import rados, rbd
+from sh import ceph
+from xml.etree import ElementTree
 global rbdInstance, rados_ioctx
 
 POOL_NAME = 'cloud-project'
@@ -69,18 +70,13 @@ def volume_creation():
 	name=str(request.args.get('name', ''))
 	size=float(request.args.get('size', 0))
 	#size = (1024) * size
-	size = (1024**3) * size
 
-	#print "\nWriting object 'hw' with contents 'Hello World!' to pool ''."
-	#rados_ioctx.write_full("hw", "Hello World!")
-
-	#print "Done! :)"
 	try:
 		global rbdInstance, rados_ioctx
-		rbdInstance.create(rados_ioctx, name, int(size))
+		rbdInstance.create(rados_ioctx, name, int((1024**3) * size))
 		os.system('sudo rbd map %s --pool %s --name client.admin'%(name, POOL_NAME))
 
-		vol_obj = Volume(name, 0, 0)
+		vol_obj = Volume(name, size, 0, 0)
 		try:
 			db.session.add(vol_obj)
 			obj = db.session.query(Volume).order_by(Volume.id.desc()).first()
@@ -97,19 +93,43 @@ def volume_creation():
 
 @app.route("/volume/query", methods=['POST', 'GET'])
 def volume_query():
-	volumeId = str(request.args.get('volumeid',''))
+	output = {}
+	try:
+		volumeId=int(str(request.args.get('volumeid')))
+	except Exception, e:
+		output['error'] = "volumeid : %s does not exist" % (volumeId)
+		return to_json(output)
+
+	obj = Volume.query.filter_by(id=volumeId).first() 
+
+	if obj and obj.status==0:
+		output['volumeId']=volumeId
+		output['name']=obj.name
+		output['size']=obj.size
+		output['status']="available"
+	elif obj and obj.status==1:
+		output['volumeId']=obj.volumeId
+		output['name']=obj.name
+		output['size']=obj.size
+		output['status']="attached"
+		output['vmid']=obj.vmid
+	else:
+		output['error'] = "volumeid : %s does not exist" % (volumeId)
+	
+	return to_json(output)
+
 
 @app.route("/volume/destroy", methods=['POST', 'GET'])
 def volume_delete():
 	output = {}
 	try:
-		vol_id=int(str(request.args.get('volumeid')))
+		volumeId=int(str(request.args.get('volumeid')))
 	except Exception, e:
 		output['status']=0
 		return to_json(output)
 
 	try:		
-		obj = Volume.query.filter_by(id=vol_id, status=0).first()
+		obj = Volume.query.filter_by(id=volumeId, status=0).first()
 		if obj:
 			name=str(obj.name)
 		else:
@@ -118,19 +138,68 @@ def volume_delete():
 
 		global rbdInstance, rados_ioctx
 		print name
-		rbdInstance.remove(rados_ioctx, str(name))
-		os.system('sudo rbd unmap /dev/rbd/%s/%s'%(POOL_NAME, str(name)))
-		
-		db.session.delete(obj)
+		os.system('sudo rbd unmap /dev/rbd/%s/%s'%(POOL_NAME, name))
+		rbdInstance.remove(rados_ioctx, name)
+			
+		obj.status=2
+		#db.session.delete(obj)
 		db.session.commit()
 	
 		output['status']=1
+		return to_json(output)
 	except Exception, e:
 		print e
 		raise e
 		output['status']=0
+		return to_json(output)
+
+def getBlockXML(xmlFile, imageName, deviceName):
+	tree = ElementTree.parse(xmlFile)
+	root = tree.getroot()
+	imageName = POOL_NAME + '/' + imageName
+	root.find('source').attrib['name'] = imageName
+	root.find('source').find('host').attrib['name'] = str(eval(ceph('mon_status').stdout)['monmap']['mons'][0]['name'])
+	#root.find('target').attrib['dev'] = deviceName
+
+	return ElementTree.tostring(root)
 	
-	return to_json(output)	
+@app.route("/volume/attach", methods=['POST', 'GET'])
+def volume_attach():
+	output={}
+	try:
+		vmId = int(str(request.args.get('vmid','0')))
+		volumeId = int(str(request.args.get('volumeid','0')))
+	except Exception, e:
+		output['status']=0
+		return to_json(output)
+
+	vm_obj = VirtualMachine.query.filter_by(id=vmId).first()
+	vol_obj = Volume.query.filter_by(id=volumeId).first()
+
+	if vm_obj and vol_obj:
+		connect = libvirt.open("remote+ssh://" + vm_obj.ip_pm + '/system')
+		domain = connect.lookupByUUIDString(vm_obj.uuid)
+		configXML = getBlockXML('app/block_config.xml', vol_obj.name, vm_obj.name)
+		domain.attachDevice(configXML)
+		connect.close()
+
+		vol_obj.status=1
+		vol_obj.vmid=str(vmId)
+		db.session.commit()
+
+		output['status']=1
+		return to_json(output)
+	else:
+		'''
+		try:
+			connect.close()
+		except Exception, e:
+			print e
+		'''
+		print vol_obj
+		print vm_obj
+		output['status']=0
+		return to_json(output)
 
 def create_xml(_uuid, arch, vm_name, memory, vcpu, image_location, storage_location):
 	xml = "<domain type='" + str(arch) + "'>  \
@@ -379,7 +448,7 @@ def page_not_found(e):
 
 @app.errorhandler(404)
 def not_found(error):
-    return make_response(jsonify({ 'Error': 'URL not found' } ), 404)
+	return make_response(jsonify({ 'Error': 'URL not found' } ), 404)
 
 @app.route("/test")
 def list_virtual_machines():
@@ -416,10 +485,10 @@ def destroy(vmid):
 			if obj:
 				connect = libvirt.open("remote+ssh://" + \
 					obj.ip_pm + '/system')
-				temp = connect.lookupByUUIDString(obj.uuid)
-				if temp.isActive():
-					temp.destroy()
-				temp.undefine()
+				domain = connect.lookupByUUIDString(obj.uuid)
+				if domain.isActive():
+					domain.destroy()
+				domain.undefine()
 				db.session.delete(obj)
 				db.session.commit()
 				return 1

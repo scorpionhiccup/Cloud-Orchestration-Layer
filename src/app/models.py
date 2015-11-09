@@ -50,6 +50,7 @@ class Volume(db.Model):
 	name = db.Column(db.String(50))
 	vmid = db.Column(db.String(50))
 	status = db.Column(db.Integer, unique=False)
+	size=db.Column(db.Integer)
 	'''
 		status:
 			0 => No VM Attached.
@@ -57,7 +58,8 @@ class Volume(db.Model):
 			2 => VM Deleted.
 	'''
 
-	def __init__(self, name, status=0, vmid=0):
+	def __init__(self, name, size, status=0, vmid='0'):
 		self.name=name
+		self.size=size
 		self.status=status
 		self.vmid=vmid
