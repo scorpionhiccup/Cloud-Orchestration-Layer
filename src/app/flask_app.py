@@ -180,6 +180,7 @@ def volume_attach():
 		connect = libvirt.open("remote+ssh://" + vm_obj.ip_pm + '/system')
 		domain = connect.lookupByUUIDString(vm_obj.uuid)
 		configXML = getBlockXML('app/block_config.xml', vol_obj.name, vm_obj.name)
+		print configXML
 		domain.attachDevice(configXML)
 		connect.close()
 
@@ -288,7 +289,7 @@ def vm_creation():
 			ram, cpu, \
 			ret['name'], "/home/" + output.username + "/Images/linux.img")
 		
-		print str_out
+		#print str_out
 		connect_xml = connect.defineXML(str(str_out))
 		connect_xml.create()
 		connect.close()
